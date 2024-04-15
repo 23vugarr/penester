@@ -1,10 +1,12 @@
 package agents
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"masProject/agents/types"
 	"net"
+	"sync"
 )
 
 type Agent struct {
@@ -25,9 +27,13 @@ func NewAgent(ip, port, balancerIp string, maxLoad int) *Agent {
 }
 
 func (a *Agent) Run() {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
 	if err := a.SetTcpServer(); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("TCP Server is created...")
 	defer func(tcpServer *types.TCPServer) {
 		err := tcpServer.Close()
 		if err != nil {
@@ -35,42 +41,39 @@ func (a *Agent) Run() {
 		}
 	}(a.tcpServer)
 
-	log.Println("TCP server created...")
+	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Content: fmt.Sprintf("ip addr: %s%s, maxload: %d", a.IP, a.Port, a.MaxLoad)})
 
-	conn, err := net.Dial("tcp", a.BalancerIp)
-	if err != nil {
-		fmt.Println(err)
-		return
+	if err := a.SendNotificationToBalancer(messageBytes); err != nil {
+		log.Fatal(err)
 	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
+	log.Println("Balancer is informed...")
 
-		}
-	}(conn)
+	go a.AcceptInstructions(&wg)
+	wg.Wait()
+}
 
-	fmt.Println("Connected to Balancer Server...")
-	//reader := bufio.NewReader(os.Stdin)
-
-	//message, _ := reader.ReadString('\n')
-	message := fmt.Sprintf("ip addr: %s%s, maxload: %d", a.IP, a.Port, a.MaxLoad)
-
-	_, err = conn.Write([]byte(message))
+func (a *Agent) SetTcpServer() error {
+	a.tcpServer = types.NewTcpServer(a.IP, a.Port)
+	err := a.tcpServer.Run()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
+		return err
 	}
+
+	return nil
+}
+
+func (a *Agent) AcceptInstructions(wg *sync.WaitGroup) {
+	defer wg.Done()
 
 	for {
 		conn, err := a.tcpServer.Accept()
 		if err != nil {
 			fmt.Println("Error:", err)
-			continue
 		}
+		log.Println("Accepting Instructions...")
 
 		go func(conn net.Conn) {
-			log.Println("accepting connections....")
-
 			defer func(conn net.Conn) {
 				err := conn.Close()
 				if err != nil {
@@ -85,40 +88,35 @@ func (a *Agent) Run() {
 					fmt.Println("Error:", err)
 					return
 				}
-
-				fmt.Printf("Received: %s\n", buffer[:n])
+				var message types.Message
+				if err := json.Unmarshal(buffer[:n], &message); err != nil {
+					log.Fatal(err)
+					return
+				}
+				log.Println(message)
 			}
 		}(conn)
-	}
 
-	//if err := a.SendNotificationToBalancer(); err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//go func() {
-	//	err := a.AcceptInstructions()
-	//	if err != nil {
-	//
-	//	}
-	//}()
+	}
 }
 
-func (a *Agent) SetTcpServer() error {
-	a.tcpServer = types.NewTcpServer(a.IP, a.Port)
-	err := a.tcpServer.Run()
+func (a *Agent) SendNotificationToBalancer(message []byte) error {
+	conn, err := net.Dial("tcp", a.BalancerIp)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 		return err
 	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			fmt.Println("Error closing the connection:", err)
+		}
+	}()
 
-	return nil
-}
-
-func (a *Agent) SendNotificationToBalancer() error {
-	return nil
-}
-
-func (a *Agent) AcceptInstructions() error {
+	_, err = conn.Write(message)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 	return nil
 }
 

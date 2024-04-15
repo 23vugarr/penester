@@ -1,12 +1,35 @@
 package main
 
-import "masProject/agents"
+import (
+	"flag"
+	"log"
+	"masProject/agents"
+)
 
 func main() {
-	agentIp := "127.0.0.1"
-	agentPort := ":9090"
-	balancerIp := "127.0.0.1:8999"
-	maxLoad := 3
+	var agentIp string
+	var agentPort string
+	var balancerIp string
+	var maxLoad int
+
+	flag.StringVar(&agentIp, "host", "", "IP address of the agent")
+	flag.StringVar(&agentPort, "port", "", "Port for the agent")
+	flag.StringVar(&balancerIp, "balancer", "", "IP address of the balancer")
+	flag.IntVar(&maxLoad, "maxload", 3, "Maximum load the agent can handle")
+	flag.Parse()
+
+	if agentIp == "" {
+		log.Fatal("Please provide the agent IP address with --host argument")
+	}
+	if agentPort == "" {
+		log.Fatal("Please provide the agent port with --port argument")
+	}
+	if balancerIp == "" {
+		log.Fatal("Please provide the balancer IP with --balancer argument")
+	}
+
+	agentPort = ":" + agentPort
+
 	agent := agents.NewAgent(agentIp, agentPort, balancerIp, maxLoad)
 	agent.Run()
 }
