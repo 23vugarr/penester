@@ -1,10 +1,22 @@
 package main
 
-import "masProject/penester"
+import (
+	"flag"
+	"masProject/penester"
+)
 
 func main() {
-	balancerIp := "127.0.0.1:8999"
-	instructions := make([]string, 0)
-	penesterAgent := penester.NewPenester(balancerIp)
-	penesterAgent.ResolveInstructions(instructions)
+	var balancer string
+	var path string
+
+	flag.StringVar(&balancer, "balancer", "", "IP address of the balancer")
+	flag.StringVar(&path, "path", "", "Port for the balancer")
+	flag.Parse()
+
+	penesterAgent := penester.NewPenester(balancer, path)
+	penesterAgent.ResolveInstructions()
+	err := penesterAgent.SubmitToBalancer()
+	if err != nil {
+		return
+	}
 }

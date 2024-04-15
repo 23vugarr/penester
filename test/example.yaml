@@ -1,0 +1,11 @@
+website: www.example.com
+
+pipeline:
+  portScan:
+      start: 3000
+      end: 50000
+      type: tcp # udp
+  dirScan:
+      dirTxt: .\dir.txt
+
+outputDir: .

@@ -1,6 +1,11 @@
 package types
 
+import (
+	"masProject/penester/pkg"
+)
+
 type Message struct {
 	Type    string
-	Content string
+	Message string
+	Content pkg.Config
 }

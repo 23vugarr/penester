@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"masProject/agents/types"
+	"masProject/penester/pkg"
 	"net"
 	"strings"
 	"sync"
@@ -59,6 +60,8 @@ func (b *Balancer) SetTcpServer() error {
 
 func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 	defer wg.Done()
+	var wgInst sync.WaitGroup
+	wgInst.Add(3)
 
 	for {
 		conn, err := b.tcpServer.Accept()
@@ -89,13 +92,13 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 				}
 				switch message.Type {
 				case "Connect":
-					ip := strings.Join(strings.Split(strings.Split(message.Content, ",")[0], ":")[1:], ":")
-					maxLoad := strings.Split(strings.Split(message.Content, ",")[1], ":")[1]
+					ip := strings.Join(strings.Split(strings.Split(message.Message, ",")[0], ":")[1:], ":")
+					maxLoad := strings.Split(strings.Split(message.Message, ",")[1], ":")[1]
 					b.Agents[ip] = map[string]string{"ip": ip, "maxLoad": maxLoad}
 					log.Println("Current agents: ", b.Agents)
-				case "Instruction":
+				case "Submission":
 					log.Println("Message type: ", message.Type)
-					go b.SendInstructions(wg)
+					go b.SendInstructions(&wgInst, message)
 				}
 				log.Println("Message: ", message)
 			}
@@ -104,6 +107,7 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 	}
 }
 
-func (b *Balancer) SendInstructions(wg *sync.WaitGroup) {
+func (b *Balancer) SendInstructions(wg *sync.WaitGroup, message types.Message) {
 	defer wg.Done()
+	pkg.PortScanner(message.Content.Pipeline.PortScan.Start, message.Content.Pipeline.PortScan.End, message.Content.Website)
 }

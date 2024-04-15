@@ -41,7 +41,7 @@ func (a *Agent) Run() {
 		}
 	}(a.tcpServer)
 
-	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Content: fmt.Sprintf("ip addr: %s%s, maxload: %d", a.IP, a.Port, a.MaxLoad)})
+	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip addr: %s%s, maxload: %d", a.IP, a.Port, a.MaxLoad)})
 
 	if err := a.SendNotificationToBalancer(messageBytes); err != nil {
 		log.Fatal(err)
