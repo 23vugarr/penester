@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"masProject/agents/types"
-	"masProject/penester/pkg"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -14,15 +14,21 @@ import (
 type Balancer struct {
 	IP        string
 	Port      string
-	Agents    map[string]map[string]string
+	Agents    map[string]*AgentInfo
 	tcpServer *types.TCPServer
+}
+
+type AgentInfo struct {
+	IP          string
+	MaxLoad     int
+	CurrentLoad int
 }
 
 func NewBalancer(ip, port string) *Balancer {
 	return &Balancer{
 		IP:     ip,
 		Port:   port,
-		Agents: make(map[string]map[string]string),
+		Agents: make(map[string]*AgentInfo),
 	}
 }
 
@@ -62,6 +68,7 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 	defer wg.Done()
 	var wgInst sync.WaitGroup
 	wgInst.Add(3)
+	defer wgInst.Wait()
 
 	for {
 		conn, err := b.tcpServer.Accept()
@@ -94,11 +101,11 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 				case "Connect":
 					ip := strings.Join(strings.Split(strings.Split(message.Message, ",")[0], ":")[1:], ":")
 					maxLoad := strings.Split(strings.Split(message.Message, ",")[1], ":")[1]
-					b.Agents[ip] = map[string]string{"ip": ip, "maxLoad": maxLoad}
-					log.Println("Current agents: ", b.Agents)
+					maxLoadInt, _ := strconv.Atoi(maxLoad)
+					b.Agents[ip] = &AgentInfo{IP: ip, MaxLoad: maxLoadInt, CurrentLoad: 0}
+					log.Printf("Agent connected: %s with max load %d\n", ip, maxLoadInt)
 				case "Submission":
-					log.Println("Message type: ", message.Type)
-					go b.SendInstructions(&wgInst, message)
+					b.distributeTask(message)
 				}
 				log.Println("Message: ", message)
 			}
@@ -107,7 +114,41 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 	}
 }
 
-func (b *Balancer) SendInstructions(wg *sync.WaitGroup, message types.Message) {
-	defer wg.Done()
-	pkg.PortScanner(message.Content.Pipeline.PortScan.Start, message.Content.Pipeline.PortScan.End, message.Content.Website)
+func (b *Balancer) distributeTask(message types.Message) {
+	agent := b.selectLeastLoadedAgent()
+	if agent == nil {
+		log.Println("No agents available")
+		return
+	}
+	go b.sendInstructions(agent, message)
+	agent.CurrentLoad++
+}
+
+func (b *Balancer) selectLeastLoadedAgent() *AgentInfo {
+	var selected *AgentInfo
+	for _, agent := range b.Agents {
+		if selected == nil || float32(agent.CurrentLoad)/float32(agent.MaxLoad) < float32(selected.CurrentLoad)/float32(selected.MaxLoad) {
+			selected = agent
+		}
+	}
+	return selected
+}
+
+func (b *Balancer) sendInstructions(agent *AgentInfo, message types.Message) {
+	conn, err := net.Dial("tcp", agent.IP)
+	if err != nil {
+		log.Println("Error dialing agent:", err)
+		return
+	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+
+	msg, _ := json.Marshal(message)
+	if _, err := conn.Write(msg); err != nil {
+		log.Println("Error sending instructions:", err)
+	}
 }

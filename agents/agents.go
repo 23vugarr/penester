@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"masProject/agents/types"
+	"masProject/penester/pkg"
 	"net"
 	"sync"
 )
@@ -41,7 +42,7 @@ func (a *Agent) Run() {
 		}
 	}(a.tcpServer)
 
-	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip addr: %s%s, maxload: %d", a.IP, a.Port, a.MaxLoad)})
+	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip:%s%s, maxload:%d", a.IP, a.Port, a.MaxLoad)})
 
 	if err := a.SendNotificationToBalancer(messageBytes); err != nil {
 		log.Fatal(err)
@@ -94,6 +95,10 @@ func (a *Agent) AcceptInstructions(wg *sync.WaitGroup) {
 					return
 				}
 				log.Println(message)
+				err = a.ExecuteInstruction(message)
+				if err != nil {
+					return
+				}
 			}
 		}(conn)
 
@@ -120,6 +125,18 @@ func (a *Agent) SendNotificationToBalancer(message []byte) error {
 	return nil
 }
 
-func (a *Agent) ExecuteInstruction() error {
+func (a *Agent) ExecuteInstruction(message types.Message) error {
+	a.ExecutePortScanner(message)
+	//a.ExecuteDirScanner(message)
 	return nil
+}
+
+func (a *Agent) ExecutePortScanner(message types.Message) {
+	log.Println("Started port scanning...")
+	pkg.PortScanner(message.Content.Pipeline.PortScan.Start, message.Content.Pipeline.PortScan.End, message.Content.Website)
+}
+
+func (a *Agent) ExecuteDirScanner(message types.Message) {
+	log.Println("Started directory scanning...")
+	pkg.DirScaner(message.Content.Website)
 }
