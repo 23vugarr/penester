@@ -1,5 +1,7 @@
 # Penester - A Conceptual Multi-Agent Penetration Testing App
 
+Penester is a robust multi-agent application designed for efficient and scalable penetration testing. It utilizes a controller-agent architecture to manage and execute security testing tasks across multiple network nodes.
+
 ---
 ## Penester Architecture
 1. Balancer [Controller] - Controls the agents that executes command sent by Balancer, receives conditions of agents and load balances the pipeline.
