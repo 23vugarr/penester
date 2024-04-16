@@ -8,6 +8,7 @@ import (
 	"masProject/penester/pkg"
 	"net"
 	"sync"
+	"time"
 )
 
 type Agent struct {
@@ -29,7 +30,7 @@ func NewAgent(ip, port, balancerIp string, maxLoad int) *Agent {
 
 func (a *Agent) Run() {
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 
 	if err := a.SetTcpServer(); err != nil {
 		log.Fatal(err)
@@ -50,6 +51,7 @@ func (a *Agent) Run() {
 	log.Println("Balancer is informed...")
 
 	go a.AcceptInstructions(&wg)
+	go a.sendHeartbeat(&wg)
 	wg.Wait()
 }
 
@@ -123,6 +125,20 @@ func (a *Agent) SendNotificationToBalancer(message []byte) error {
 		return err
 	}
 	return nil
+}
+
+func (a *Agent) sendHeartbeat(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for {
+		time.Sleep(2 * time.Second)
+		msg := types.Message{Type: "Heartbeat", Message: fmt.Sprintf("ip:%s%s, maxload:%d", a.IP, a.Port, a.MaxLoad)}
+		msgBytes, _ := json.Marshal(msg)
+		err := a.SendNotificationToBalancer(msgBytes)
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (a *Agent) ExecuteInstruction(message types.Message) error {

@@ -19,4 +19,5 @@ func main() {
 	if err != nil {
 		return
 	}
+	// go run .\penester.go --balancer 127.0.0.1:8999 --path .\test\example.yaml
 }

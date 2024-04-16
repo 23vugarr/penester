@@ -25,4 +25,5 @@ func main() {
 
 	balancer := agents.NewBalancer(balancerIp, balancerPort)
 	balancer.Run()
+	// go run .\balancer.go --host 127.0.0.1 --port 8999
 }

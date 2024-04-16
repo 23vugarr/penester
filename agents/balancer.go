@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Balancer struct {
@@ -22,6 +23,7 @@ type AgentInfo struct {
 	IP          string
 	MaxLoad     int
 	CurrentLoad int
+	heartbeat   time.Time
 }
 
 func NewBalancer(ip, port string) *Balancer {
@@ -34,7 +36,7 @@ func NewBalancer(ip, port string) *Balancer {
 
 func (b *Balancer) Run() {
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 
 	if err := b.SetTcpServer(); err != nil {
 		log.Fatal(err)
@@ -48,6 +50,7 @@ func (b *Balancer) Run() {
 	}(b.tcpServer)
 
 	go b.GetMessages(&wg)
+	go b.checkAgentHeartbeats(&wg)
 
 	wg.Wait()
 
@@ -66,16 +69,15 @@ func (b *Balancer) SetTcpServer() error {
 
 func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 	defer wg.Done()
-	var wgInst sync.WaitGroup
-	wgInst.Add(3)
-	defer wgInst.Wait()
+	var mu sync.Mutex
+
+	log.Println("Accepting Connections...")
 
 	for {
 		conn, err := b.tcpServer.Accept()
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
-		log.Println("Accepting Connections...")
 
 		go func(conn net.Conn) {
 			defer func(conn net.Conn) {
@@ -102,10 +104,15 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 					ip := strings.Join(strings.Split(strings.Split(message.Message, ",")[0], ":")[1:], ":")
 					maxLoad := strings.Split(strings.Split(message.Message, ",")[1], ":")[1]
 					maxLoadInt, _ := strconv.Atoi(maxLoad)
-					b.Agents[ip] = &AgentInfo{IP: ip, MaxLoad: maxLoadInt, CurrentLoad: 0}
+					b.Agents[ip] = &AgentInfo{IP: ip, MaxLoad: maxLoadInt, CurrentLoad: 0, heartbeat: time.Now()}
 					log.Printf("Agent connected: %s with max load %d\n", ip, maxLoadInt)
+				case "Heartbeat":
+					ip := strings.Join(strings.Split(strings.Split(message.Message, ",")[0], ":")[1:], ":")
+					b.getHeartbeats(&mu, ip)
 				case "Submission":
 					b.distributeTask(message)
+				case "TaskDone":
+					fmt.Println("will be done")
 				}
 				log.Println("Message: ", message)
 			}
@@ -151,4 +158,35 @@ func (b *Balancer) sendInstructions(agent *AgentInfo, message types.Message) {
 	if _, err := conn.Write(msg); err != nil {
 		log.Println("Error sending instructions:", err)
 	}
+}
+
+func (b *Balancer) checkAgentHeartbeats(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for {
+		log.Println("checking agents....")
+		for key, value := range b.Agents {
+			if diff := time.Now().Sub(value.heartbeat); diff.Seconds() > 5 {
+				fmt.Println(diff)
+				delete(b.Agents, key)
+				log.Println("Problem occured while getting heartbeat of", key)
+				log.Println("Current agents: ", b.Agents)
+			}
+		}
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func (b *Balancer) getHeartbeats(mu *sync.Mutex, id string) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	agent, exists := b.Agents[id]
+	if !exists {
+		log.Printf("Agent with ID %s not found", id)
+		return
+	}
+
+	agent.heartbeat = time.Now()
+	log.Println("Updated heartbeat of", id)
 }

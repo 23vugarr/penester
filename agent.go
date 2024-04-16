@@ -32,4 +32,5 @@ func main() {
 
 	agent := agents.NewAgent(agentIp, agentPort, balancerIp, maxLoad)
 	agent.Run()
+	// go run .\agent.go --host 127.0.0.1 --port 9090 --maxload 3 --balancer 127.0.0.1:8999
 }
