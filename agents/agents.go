@@ -43,7 +43,7 @@ func (a *Agent) Run() {
 		}
 	}(a.tcpServer)
 
-	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip:%s%s, maxload:%d", a.IP, a.Port, a.MaxLoad)})
+	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip:%s%s, maxload:%d\n", a.IP, a.Port, a.MaxLoad)})
 
 	if err := a.SendNotificationToBalancer(messageBytes); err != nil {
 		log.Fatal(err)
@@ -131,8 +131,8 @@ func (a *Agent) sendHeartbeat(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for {
-		time.Sleep(2 * time.Second)
-		msg := types.Message{Type: "Heartbeat", Message: fmt.Sprintf("ip:%s%s, maxload:%d", a.IP, a.Port, a.MaxLoad)}
+		time.Sleep(5 * time.Second)
+		msg := types.Message{Type: "Heartbeat", Message: fmt.Sprintf("ip:%s%s, maxload:%d\n", a.IP, a.Port, a.MaxLoad)}
 		msgBytes, _ := json.Marshal(msg)
 		err := a.SendNotificationToBalancer(msgBytes)
 		if err != nil {

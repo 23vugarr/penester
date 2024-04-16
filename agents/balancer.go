@@ -134,7 +134,7 @@ func (b *Balancer) distributeTask(message types.Message) {
 func (b *Balancer) selectLeastLoadedAgent() *AgentInfo {
 	var selected *AgentInfo
 	for _, agent := range b.Agents {
-		if selected == nil || float32(agent.CurrentLoad)/float32(agent.MaxLoad) < float32(selected.CurrentLoad)/float32(selected.MaxLoad) {
+		if selected == nil || float32(agent.CurrentLoad+1)/float32(agent.MaxLoad) < float32(selected.CurrentLoad+1)/float32(selected.MaxLoad) {
 			selected = agent
 		}
 	}
@@ -164,15 +164,15 @@ func (b *Balancer) checkAgentHeartbeats(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for {
-		log.Println("checking agents....")
 		for key, value := range b.Agents {
-			if diff := time.Now().Sub(value.heartbeat); diff.Seconds() > 5 {
+			if diff := time.Now().Sub(value.heartbeat); diff.Seconds() > 6 {
 				fmt.Println(diff)
 				delete(b.Agents, key)
 				log.Println("Problem occured while getting heartbeat of", key)
 				log.Println("Current agents: ", b.Agents)
 			}
 		}
+		log.Println("All agents is up...")
 		time.Sleep(10 * time.Second)
 	}
 }
