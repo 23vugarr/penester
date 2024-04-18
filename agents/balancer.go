@@ -111,6 +111,7 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 					currLoad, _ := strconv.Atoi(strings.Join(strings.Split(strings.Split(message.Message, ",")[1], ":")[1:], ":"))
 					b.getHeartbeats(&mu, ip, currLoad)
 				case "Submission":
+					log.Println("Got new task submission...")
 					b.distributeTask(message)
 				case "TaskDone":
 					fmt.Println("will be done")
@@ -158,6 +159,8 @@ func (b *Balancer) sendInstructions(agent *AgentInfo, message types.Message) {
 	msg, _ := json.Marshal(message)
 	if _, err := conn.Write(msg); err != nil {
 		log.Println("Error sending instructions:", err)
+	} else {
+		log.Printf("Task sent to %s...", agent.IP)
 	}
 }
 
@@ -175,8 +178,6 @@ func (b *Balancer) checkAgentHeartbeats(wg *sync.WaitGroup) {
 		}
 		if len(b.Agents) == 0 {
 			log.Println("No Agent in the Agent List...")
-		} else {
-			log.Println("All agents is up...")
 		}
 
 		time.Sleep(10 * time.Second)

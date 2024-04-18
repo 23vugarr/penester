@@ -28,7 +28,7 @@ func PortScanner(start, end int, website string, doneCh chan<- bool) {
 		}(port)
 	}
 	wg.Wait()
-	log.Println("sending done...")
+	log.Println("Sending done signal...")
 	doneCh <- true
 	close(doneCh)
 }
