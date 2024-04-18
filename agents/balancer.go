@@ -108,13 +108,13 @@ func (b *Balancer) GetMessages(wg *sync.WaitGroup) {
 					log.Printf("Agent connected: %s with max load %d\n", ip, maxLoadInt)
 				case "Heartbeat":
 					ip := strings.Join(strings.Split(strings.Split(message.Message, ",")[0], ":")[1:], ":")
-					b.getHeartbeats(&mu, ip)
+					currLoad, _ := strconv.Atoi(strings.Join(strings.Split(strings.Split(message.Message, ",")[1], ":")[1:], ":"))
+					b.getHeartbeats(&mu, ip, currLoad)
 				case "Submission":
 					b.distributeTask(message)
 				case "TaskDone":
 					fmt.Println("will be done")
 				}
-				log.Println("Message: ", message)
 			}
 		}(conn)
 
@@ -128,7 +128,6 @@ func (b *Balancer) distributeTask(message types.Message) {
 		return
 	}
 	go b.sendInstructions(agent, message)
-	agent.CurrentLoad++
 }
 
 func (b *Balancer) selectLeastLoadedAgent() *AgentInfo {
@@ -137,11 +136,13 @@ func (b *Balancer) selectLeastLoadedAgent() *AgentInfo {
 		if selected == nil || float32(agent.CurrentLoad+1)/float32(agent.MaxLoad) < float32(selected.CurrentLoad+1)/float32(selected.MaxLoad) {
 			selected = agent
 		}
+		fmt.Println(agent)
 	}
 	return selected
 }
 
 func (b *Balancer) sendInstructions(agent *AgentInfo, message types.Message) {
+	agent.CurrentLoad++
 	conn, err := net.Dial("tcp", agent.IP)
 	if err != nil {
 		log.Println("Error dialing agent:", err)
@@ -172,12 +173,17 @@ func (b *Balancer) checkAgentHeartbeats(wg *sync.WaitGroup) {
 				log.Println("Current agents: ", b.Agents)
 			}
 		}
-		log.Println("All agents is up...")
+		if len(b.Agents) == 0 {
+			log.Println("No Agent in the Agent List...")
+		} else {
+			log.Println("All agents is up...")
+		}
+
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func (b *Balancer) getHeartbeats(mu *sync.Mutex, id string) {
+func (b *Balancer) getHeartbeats(mu *sync.Mutex, id string, currLoad int) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -188,5 +194,6 @@ func (b *Balancer) getHeartbeats(mu *sync.Mutex, id string) {
 	}
 
 	agent.heartbeat = time.Now()
-	log.Println("Updated heartbeat of", id)
+	agent.CurrentLoad = currLoad
+	log.Printf("Updated heartbeat of %s with current load of %d", id, currLoad)
 }

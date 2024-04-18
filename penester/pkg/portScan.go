@@ -2,14 +2,14 @@ package pkg
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
 )
 
-func PortScanner(start, end int, website string) {
+func PortScanner(start, end int, website string, doneCh chan<- bool) {
 	var wg sync.WaitGroup
-	wg.Wait()
 	for port := start; port <= end; port++ {
 		wg.Add(1)
 		go func(port int) {
@@ -20,8 +20,15 @@ func PortScanner(start, end int, website string) {
 				fmt.Printf("Port %d closed\n", port)
 				return
 			}
-			conn.Close()
+			err = conn.Close()
+			if err != nil {
+				return
+			}
 			fmt.Printf("Port %d open\n", port)
 		}(port)
 	}
+	wg.Wait()
+	log.Println("sending done...")
+	doneCh <- true
+	close(doneCh)
 }

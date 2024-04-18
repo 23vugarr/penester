@@ -6,25 +6,38 @@ import (
 	"log"
 	"masProject/agents/types"
 	"masProject/penester/pkg"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
 )
 
 type Agent struct {
-	IP         string
-	Port       string
-	BalancerIp string
-	MaxLoad    int
-	tcpServer  *types.TCPServer
+	IP           string
+	Port         string
+	BalancerIp   string
+	MaxLoad      int
+	currentLoad  int
+	tcpServer    *types.TCPServer
+	currentTasks map[string]*Task
+	doneTasks    map[string]*Task
+}
+
+type Task struct {
+	state      bool
+	trackingId string
+	startTime  time.Time
+	endTime    time.Time
 }
 
 func NewAgent(ip, port, balancerIp string, maxLoad int) *Agent {
 	return &Agent{
-		IP:         ip,
-		Port:       port,
-		BalancerIp: balancerIp,
-		MaxLoad:    maxLoad,
+		IP:           ip,
+		Port:         port,
+		BalancerIp:   balancerIp,
+		MaxLoad:      maxLoad,
+		currentTasks: make(map[string]*Task),
+		doneTasks:    make(map[string]*Task),
 	}
 }
 
@@ -43,7 +56,7 @@ func (a *Agent) Run() {
 		}
 	}(a.tcpServer)
 
-	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip:%s%s, maxload:%d\n", a.IP, a.Port, a.MaxLoad)})
+	messageBytes, _ := json.Marshal(types.Message{Type: "Connect", Message: fmt.Sprintf("ip:%s%s, maxload:%d", a.IP, a.Port, a.MaxLoad)})
 
 	if err := a.SendNotificationToBalancer(messageBytes); err != nil {
 		log.Fatal(err)
@@ -132,7 +145,7 @@ func (a *Agent) sendHeartbeat(wg *sync.WaitGroup) {
 
 	for {
 		time.Sleep(5 * time.Second)
-		msg := types.Message{Type: "Heartbeat", Message: fmt.Sprintf("ip:%s%s, maxload:%d\n", a.IP, a.Port, a.MaxLoad)}
+		msg := types.Message{Type: "Heartbeat", Message: fmt.Sprintf("ip:%s%s, currentLoad:%d", a.IP, a.Port, a.currentLoad)}
 		msgBytes, _ := json.Marshal(msg)
 		err := a.SendNotificationToBalancer(msgBytes)
 		if err != nil {
@@ -142,17 +155,70 @@ func (a *Agent) sendHeartbeat(wg *sync.WaitGroup) {
 }
 
 func (a *Agent) ExecuteInstruction(message types.Message) error {
-	a.ExecutePortScanner(message)
+	trId := generateRandomId(5)
+	a.addTask(trId)
+	a.ExecutePortScanner(message, trId)
 	//a.ExecuteDirScanner(message)
 	return nil
 }
 
-func (a *Agent) ExecutePortScanner(message types.Message) {
+func (a *Agent) ExecutePortScanner(message types.Message, trId string) {
 	log.Println("Started port scanning...")
-	pkg.PortScanner(message.Content.Pipeline.PortScan.Start, message.Content.Pipeline.PortScan.End, message.Content.Website)
+	doneCh := make(chan bool)
+	fmt.Println(a.currentLoad)
+	go pkg.PortScanner(message.Content.Pipeline.PortScan.Start, message.Content.Pipeline.PortScan.End, message.Content.Website, doneCh)
+
+	done := <-doneCh
+
+	if done {
+		a.endTask(trId)
+	}
 }
 
 func (a *Agent) ExecuteDirScanner(message types.Message) {
 	log.Println("Started directory scanning...")
 	pkg.DirScaner(message.Content.Website)
+}
+
+func (a *Agent) addTask(trackingId string) {
+	a.currentLoad++
+	task := Task{
+		state:      true,
+		trackingId: trackingId,
+		startTime:  time.Now(),
+	}
+	a.currentTasks[trackingId] = &task
+}
+
+func (a *Agent) endTask(trackingId string) {
+	a.currentLoad--
+	for key, val := range a.currentTasks {
+		if key == trackingId {
+			delete(a.currentTasks, key)
+			val.endTime = time.Now()
+			a.doneTasks[key] = val
+			log.Println("Done task: ", val)
+			a.getInfo()
+		}
+		break
+	}
+}
+
+func generateRandomId(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	var seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func (a *Agent) getInfo() {
+	log.Println("Current info...")
+	log.Printf("Current load: %d, Done tasks: ", a.currentLoad)
+	for _, val := range a.doneTasks {
+		log.Printf("Tracking id: %s, start time: %s, end time: %s", val.trackingId, val.startTime.String(), val.endTime.String())
+	}
 }
